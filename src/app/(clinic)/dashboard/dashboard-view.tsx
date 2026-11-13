@@ -3,6 +3,7 @@
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import { CancelMissionDialog } from "@/components/dashboard/cancel-mission-dialog";
 import { CommandBar, RefreshingHint } from "@/components/dashboard/command-bar";
 import { KpiGrid } from "@/components/dashboard/kpi-grid";
 import { LiveMapPanel } from "@/components/dashboard/live-map-panel";
@@ -12,7 +13,7 @@ import { MissionQueue } from "@/components/dashboard/mission-queue";
 import { NewMissionDialog } from "@/components/dashboard/new-mission-dialog";
 import { useHospitalName } from "@/components/dashboard/hospital-name-context";
 import { dashboardErrorMessageKey } from "@/lib/dashboard/messages";
-import type { DashboardResult } from "@/lib/dashboard/service";
+import type { DashboardErrorCode, DashboardResult } from "@/lib/dashboard/service";
 import type { DashboardBootstrap, QueueFilter } from "@/lib/dashboard/types";
 import { useDispatchCenter } from "@/lib/dashboard/use-dispatch-center";
 import { useI18n } from "@/lib/i18n/provider";
@@ -62,6 +63,7 @@ function DispatchCenter({
     loadMore,
     redispatch,
     redispatchCompany,
+    cancelMission,
     createMission,
     createCompanyMission,
     loadCompanyOptions,
@@ -73,6 +75,8 @@ function DispatchCenter({
   );
   const [filter, setFilter] = useTabState<QueueFilter>("dashboard:filter", "all");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [cancelMissionId, setCancelMissionId] = useState<string | null>(null);
+  const [cancelNotice, setCancelNotice] = useState(false);
 
   const serverNowMs = updatedAt ?? 0;
   const clockMs = useClock(serverNowMs, 30_000);
@@ -81,6 +85,28 @@ function DispatchCenter({
     () => snapshot?.missions.find((mission) => mission.id === selectedId) ?? null,
     [snapshot, selectedId],
   );
+  const cancelTarget = useMemo(
+    () =>
+      cancelMissionId === null
+        ? null
+        : snapshot?.missions.find((mission) => mission.id === cancelMissionId) ?? null,
+    [cancelMissionId, snapshot],
+  );
+
+  useEffect(() => {
+    if (!cancelNotice) return;
+    const id = setTimeout(() => setCancelNotice(false), 6000);
+    return () => clearTimeout(id);
+  }, [cancelNotice]);
+
+  const handleCancel = async (missionId: string): Promise<DashboardErrorCode | null> => {
+    const code = await cancelMission(missionId);
+    if (!code) {
+      setCancelNotice(true);
+      setCancelMissionId(null);
+    }
+    return code;
+  };
 
   const hospitalName = snapshot?.hospital.name ?? fallbackHospitalName;
 
@@ -131,6 +157,15 @@ function DispatchCenter({
             </p>
           ) : null}
 
+          {cancelNotice ? (
+            <p
+              role="status"
+              className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800"
+            >
+              {t("dc.cancel.success")}
+            </p>
+          ) : null}
+
           <KpiGrid kpis={snapshot?.kpis ?? null} />
 
           {snapshot ? (
@@ -154,6 +189,7 @@ function DispatchCenter({
                   onSelect={setSelectedId}
                   initialNowMs={serverNowMs || clockMs}
                   onRefresh={() => void refresh()}
+                  onCancelRequest={(mission) => setCancelMissionId(mission.id)}
                 />
               </div>
 
@@ -165,6 +201,7 @@ function DispatchCenter({
                   companyName={selected ? origins[selected.id]?.company_name ?? null : null}
                   onRedispatch={redispatch}
                   onRedispatchCompany={redispatchCompany}
+                  onCancelRequest={(mission) => setCancelMissionId(mission.id)}
                   onClose={() => setSelectedId(null)}
                 />
                 <MissionLifecycle
@@ -192,6 +229,14 @@ function DispatchCenter({
             setFilter("all");
             setSelectedId(missionId);
           }}
+        />
+      ) : null}
+
+      {cancelTarget ? (
+        <CancelMissionDialog
+          mission={cancelTarget}
+          onClose={() => setCancelMissionId(null)}
+          onConfirm={handleCancel}
         />
       ) : null}
 

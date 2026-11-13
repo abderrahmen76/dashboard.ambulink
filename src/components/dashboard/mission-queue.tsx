@@ -1,9 +1,9 @@
 "use client";
 
-import { Building2, Clock3, Loader2, MapPin } from "lucide-react";
+import { Building2, Clock3, Loader2, MapPin, XCircle } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { formatRelative, isExpiredOffer } from "@/lib/dashboard/format";
+import { canCancelMission, formatRelative, isExpiredOffer } from "@/lib/dashboard/format";
 import type { DashboardMission, MissionStatus, QueueFilter } from "@/lib/dashboard/types";
 import type { MessageKey } from "@/lib/i18n/dictionaries";
 import { useI18n } from "@/lib/i18n/provider";
@@ -116,6 +116,7 @@ export function MissionQueue({
   onSelect,
   initialNowMs,
   onRefresh,
+  onCancelRequest,
 }: {
   missions: DashboardMission[];
   total: number;
@@ -129,6 +130,7 @@ export function MissionQueue({
   onSelect: (id: string) => void;
   initialNowMs: number;
   onRefresh: () => void;
+  onCancelRequest: (mission: DashboardMission) => void;
 }) {
   const { t } = useI18n();
   const listRef = useRef<HTMLUListElement>(null);
@@ -221,55 +223,71 @@ export function MissionQueue({
           visible.map((mission) => {
             const expired = isExpiredOffer(mission);
             const active = mission.id === selectedId;
+            const cancellable = canCancelMission(mission);
             return (
               <li key={mission.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(mission.id)}
-                  aria-pressed={active}
-                  className={`flex w-full items-start gap-3 px-4 py-3 text-start transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
+                <div
+                  className={`flex items-start transition ${
                     active ? "bg-brand-50/80" : "hover:bg-surface/70"
                   }`}
                 >
-                  <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-surface-strong text-brand-700">
-                    <MapPin aria-hidden className="size-4" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="truncate text-sm font-semibold text-brand-900">
-                        {mission.patient_name?.trim() || t("dc.queue.patientUnknown")}
-                      </span>
-                      {mission.manager_entry ? (
-                        <span title={t("dc.details.managerMission")} className="shrink-0">
-                          <Building2 aria-hidden className="size-3.5 text-brand-400" />
+                  <button
+                    type="button"
+                    onClick={() => onSelect(mission.id)}
+                    aria-pressed={active}
+                    className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-start focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+                  >
+                    <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg bg-surface-strong text-brand-700">
+                      <MapPin aria-hidden className="size-4" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-semibold text-brand-900">
+                          {mission.patient_name?.trim() || t("dc.queue.patientUnknown")}
                         </span>
+                        {mission.manager_entry ? (
+                          <span title={t("dc.details.managerMission")} className="shrink-0">
+                            <Building2 aria-hidden className="size-3.5 text-brand-400" />
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-ink-soft">
+                        {mission.pickup_label ?? "—"}
+                      </span>
+                      <span className="mt-1 flex items-center gap-2">
+                        <MissionStatusPill status={mission.status} />
+                        <span className="text-[11px] text-ink-soft/80">
+                          {formatRelative(mission.created_at, initialNowMs, t)}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="mt-0.5 shrink-0">
+                      {expired ? (
+                        <span className="rounded-full bg-accent-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-700 ring-1 ring-accent-100">
+                          {t("dc.filter.expired")}
+                        </span>
+                      ) : mission.attempt?.state === "offering" ? (
+                        <OfferCountdown
+                          key={mission.attempt.id}
+                          deadlineAt={mission.attempt.deadline_at}
+                          initialNowMs={initialNowMs}
+                          onDue={onRefresh}
+                        />
                       ) : null}
                     </span>
-                    <span className="mt-0.5 block truncate text-xs text-ink-soft">
-                      {mission.pickup_label ?? "—"}
-                    </span>
-                    <span className="mt-1 flex items-center gap-2">
-                      <MissionStatusPill status={mission.status} />
-                      <span className="text-[11px] text-ink-soft/80">
-                        {formatRelative(mission.created_at, initialNowMs, t)}
-                      </span>
-                    </span>
-                  </span>
-                  <span className="mt-0.5 shrink-0">
-                    {expired ? (
-                      <span className="rounded-full bg-accent-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-700 ring-1 ring-accent-100">
-                        {t("dc.filter.expired")}
-                      </span>
-                    ) : mission.attempt?.state === "offering" ? (
-                      <OfferCountdown
-                        key={mission.attempt.id}
-                        deadlineAt={mission.attempt.deadline_at}
-                        initialNowMs={initialNowMs}
-                        onDue={onRefresh}
-                      />
-                    ) : null}
-                  </span>
-                </button>
+                  </button>
+                  {cancellable ? (
+                    <button
+                      type="button"
+                      onClick={() => onCancelRequest(mission)}
+                      title={t("dc.queue.cancelHint")}
+                      className="mt-2.5 me-3 inline-flex h-7 shrink-0 items-center gap-1 rounded-lg border border-accent-100 bg-white px-2 text-[11px] font-semibold text-accent-700 transition hover:bg-accent-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+                    >
+                      <XCircle aria-hidden className="size-3.5" />
+                      {t("dc.queue.cancel")}
+                    </button>
+                  ) : null}
+                </div>
               </li>
             );
           })

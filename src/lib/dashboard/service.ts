@@ -8,6 +8,7 @@ import type {
   DashboardBootstrap,
   DashboardOverview,
   DashboardSnapshot,
+  MissionCancelResult,
   MissionDispatchResult,
   MissionsPage,
 } from "./types";
@@ -219,6 +220,23 @@ export async function redispatchHospitalMission(
   if (error) return { ok: false, code: mapDashboardError(error) };
   if (!data) return { ok: false, code: "unexpected" };
   return { ok: true, data: data as MissionDispatchResult };
+}
+
+/**
+ * Cancels a pending mission whose dispatch window ended (202611130001,
+ * draft). The RPC derives the hospital from the caller's membership, locks
+ * the mission row and refuses a live offer or an already accepted mission.
+ */
+export async function cancelHospitalMission(
+  supabase: SupabaseClient,
+  missionId: string,
+): Promise<DashboardResult<MissionCancelResult>> {
+  const { data, error } = await supabase.rpc("hospital_manager_cancel_mission", {
+    p_mission_id: missionId,
+  });
+  if (error) return { ok: false, code: mapDashboardError(error) };
+  if (!data) return { ok: false, code: "unexpected" };
+  return { ok: true, data: data as MissionCancelResult };
 }
 
 /**

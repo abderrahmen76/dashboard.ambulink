@@ -1,9 +1,9 @@
 "use client";
 
-import { Building2, Loader2, Phone, Truck, UserRound, X } from "lucide-react";
+import { Building2, Loader2, Phone, Truck, UserRound, X, XCircle } from "lucide-react";
 import { useState } from "react";
 
-import { formatDateTime } from "@/lib/dashboard/format";
+import { canCancelMission, formatDateTime } from "@/lib/dashboard/format";
 import { dashboardErrorMessageKey } from "@/lib/dashboard/messages";
 import type { DashboardErrorCode } from "@/lib/dashboard/service";
 import type { DashboardDriver, DashboardMission } from "@/lib/dashboard/types";
@@ -28,6 +28,7 @@ export function MissionDetails({
   companyName,
   onRedispatch,
   onRedispatchCompany,
+  onCancelRequest,
   onClose,
 }: {
   mission: DashboardMission | null;
@@ -35,6 +36,7 @@ export function MissionDetails({
   companyName: string | null;
   onRedispatch: (missionId: string, driverId: string | null) => Promise<DashboardErrorCode | null>;
   onRedispatchCompany: (missionId: string) => Promise<DashboardErrorCode | null>;
+  onCancelRequest: (mission: DashboardMission) => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -61,6 +63,7 @@ export function MissionDetails({
     mission.status === "requested" &&
     !mission.driver_id &&
     mission.attempt?.state !== "offering";
+  const canCancel = canCancelMission(mission);
 
   const submitRedispatch = async () => {
     setPending(true);
@@ -238,6 +241,20 @@ export function MissionDetails({
 
       {canRedispatch && !companyMission && eligible.length === 0 ? (
         <p className="mt-2 text-xs text-ink-soft">{t("dc.new.noEligible")}</p>
+      ) : null}
+
+      {canCancel ? (
+        <div className="mt-4 flex flex-col gap-2 rounded-xl border border-accent-100 bg-accent-50/50 p-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="min-w-0 text-xs text-ink-soft">{t("dc.details.cancelHint")}</p>
+          <button
+            type="button"
+            onClick={() => onCancelRequest(mission)}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-accent-200 bg-white px-4 text-sm font-semibold text-accent-700 transition hover:bg-accent-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+          >
+            <XCircle aria-hidden className="size-4" />
+            {t("dc.details.cancel")}
+          </button>
+        </div>
       ) : null}
 
       {error ? (

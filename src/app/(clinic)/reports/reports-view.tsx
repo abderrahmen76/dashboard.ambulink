@@ -295,7 +295,31 @@ function ReportsWorkspace({
                         {t("reports.detail.loading")}
                       </span>
                     </div>
-                  ) : detailError || !detail ? (
+                  ) : detail ? (
+                    <MedicalReportViewer
+                      detail={detail}
+                      selectedRevision={detail.report.revision_no}
+                      onSelectRevision={setSelectedRevision}
+                      onConsult={async () => {
+                        const result = await consult();
+                        if (result.ok) {
+                          refresh();
+                          notifyInboxChanged();
+                        }
+                        return result;
+                      }}
+                      onMarkUnseen={async () => {
+                        const result = await markUnseen();
+                        if (result.ok) {
+                          refresh();
+                          notifyInboxChanged();
+                        }
+                        return result;
+                      }}
+                      onRefresh={() => refresh()}
+                      onBack={handleBack}
+                    />
+                  ) : (
                     <div className="rounded-xl border border-accent-100 bg-white p-6 text-center">
                       <AlertTriangle
                         aria-hidden
@@ -324,30 +348,6 @@ function ReportsWorkspace({
                         </button>
                       </div>
                     </div>
-                  ) : (
-                    <MedicalReportViewer
-                      detail={detail}
-                      selectedRevision={detail.report.revision_no}
-                      onSelectRevision={setSelectedRevision}
-                      onConsult={async () => {
-                        const result = await consult();
-                        if (result.ok) {
-                          refresh();
-                          notifyInboxChanged();
-                        }
-                        return result;
-                      }}
-                      onMarkUnseen={async () => {
-                        const result = await markUnseen();
-                        if (result.ok) {
-                          refresh();
-                          notifyInboxChanged();
-                        }
-                        return result;
-                      }}
-                      onRefresh={() => refresh()}
-                      onBack={handleBack}
-                    />
                   )}
                 </section>
               </div>

@@ -107,3 +107,21 @@ export function isExpiredOffer(mission: {
 }): boolean {
   return isAwaitingMission(mission) && mission.attempt?.state === "expired";
 }
+
+/**
+ * Cancellation is offered only after the dispatch window ended. An expired
+ * offer keeps the mission pending, so this never cancels by itself; the
+ * manager still confirms the action.
+ */
+export function canCancelMission(mission: {
+  manager_entry: boolean;
+  status: string;
+  driver_id: string | null;
+  attempt: { state: string } | null;
+}): boolean {
+  return (
+    mission.manager_entry &&
+    isAwaitingMission(mission) &&
+    (mission.attempt === null || mission.attempt.state === "expired")
+  );
+}

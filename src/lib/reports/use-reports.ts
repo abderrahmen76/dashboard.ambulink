@@ -5,6 +5,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import {
+  applyDetailResult,
+  detailIdentityKey,
+  visibleDetailState,
+  type DetailState,
+} from "./detail-state";
+import {
   fetchReportDetail,
   fetchReportsPage,
   markReportConsulted,
@@ -194,16 +200,10 @@ export function useReports(
   };
 }
 
-type DetailState = {
-  key: string;
-  data: ReportDetail | null;
-  error: ReportErrorCode | null;
-};
-
 /**
- * Full report for one revision, fetched only when the row is selected. The key
- * includes the page revision so a refresh also reloads the detail without
- * clearing the reader's scroll position in the list.
+ * Full report for one revision, fetched only when the row is selected. The
+ * page revision retriggers the fetch but does not change the identity key, so
+ * genuine server changes arrive without remounting the reader.
  */
 export function useReportDetail(
   reportId: string | null,
@@ -211,7 +211,7 @@ export function useReportDetail(
   revision: number,
 ) {
   const [state, setState] = useState<DetailState | null>(null);
-  const key = reportId === null ? "" : `${reportId}:${revisionNo ?? "latest"}:${revision}`;
+  const key = detailIdentityKey(reportId, revisionNo);
 
   useEffect(() => {
     if (reportId === null) return;
@@ -226,11 +226,7 @@ export function useReportDetail(
 
     void request.then((result) => {
       if (cancelled) return;
-      setState(
-        result.ok
-          ? { key, data: result.data, error: null }
-          : { key, data: null, error: result.code },
-      );
+      setState((previous) => applyDetailResult(previous, key, result));
     });
 
     return () => {
@@ -238,7 +234,7 @@ export function useReportDetail(
     };
   }, [key, reportId, revision, revisionNo]);
 
-  const current = state !== null && state.key === key ? state : null;
+  const current = visibleDetailState(state, key);
 
   const applyReview = useCallback(
     (review: ReportReview | null) => {
@@ -287,7 +283,9 @@ export function useReportDetail(
   return {
     detail: current?.data ?? null,
     loading: reportId !== null && current === null,
-    error: current?.error ?? null,
+    // While content is displayed a failed background refresh is not an error
+    // state: the reader keeps the last revision instead of losing its place.
+    error: current?.data ? null : current?.error ?? null,
     applyReview,
     consult,
     markUnseen,

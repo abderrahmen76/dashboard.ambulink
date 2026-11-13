@@ -136,6 +136,14 @@ export type MissionDispatchResult = {
   snapshot: DashboardSnapshot;
 };
 
+/** `hospital_manager_cancel_mission` (202611130001, draft). */
+export type MissionCancelResult = {
+  mission_id: string;
+  status: "cancelled";
+  cancelled_at: string;
+  snapshot: DashboardSnapshot;
+};
+
 /** One ambulance company linked to the caller's hospital (202611110009). */
 export type CompanyOption = {
   id: string;

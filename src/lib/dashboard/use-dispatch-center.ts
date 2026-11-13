@@ -20,6 +20,7 @@ import {
   type MissionPatch,
 } from "./missions";
 import {
+  cancelHospitalMission,
   createCompanyMission as createCompanyMissionRpc,
   createHospitalMission,
   fetchCompanyOptions,
@@ -550,6 +551,28 @@ export function useDispatchCenter(initial: DashboardResult<DashboardBootstrap>) 
     [applyMutationSnapshot, getClient],
   );
 
+  const cancelMission = useCallback(
+    async (missionId: string): Promise<DashboardErrorCode | null> => {
+      const supabase = getClient();
+      if (!supabase) return "unexpected";
+      const result = await cancelHospitalMission(supabase, missionId);
+      if (!result.ok) {
+        if (result.code === "migration_pending" || result.code === "access_denied") {
+          setError(result.code);
+        }
+        // The RPC locks the mission and refuses a concurrent acceptance; the
+        // local queue may still show the pre-acceptance row, so re-read it.
+        if (result.code === "conflict" || result.code === "not_found") {
+          void refresh();
+        }
+        return result.code;
+      }
+      applyMutationSnapshot(result.data.snapshot, result.data.mission_id);
+      return null;
+    },
+    [applyMutationSnapshot, getClient, refresh],
+  );
+
   const createMission = useCallback(
     async (
       input: CreateMissionInput,
@@ -1039,6 +1062,7 @@ export function useDispatchCenter(initial: DashboardResult<DashboardBootstrap>) 
     loadMore,
     redispatch,
     redispatchCompany,
+    cancelMission,
     createMission,
     createCompanyMission,
     loadCompanyOptions,
