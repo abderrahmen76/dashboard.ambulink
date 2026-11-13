@@ -10,11 +10,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 import {
+  archiveHospitalAmbulance,
   assignHospitalAmbulanceDriver,
   fetchFleetSnapshot,
   saveHospitalAmbulance,
 } from "./service";
 import type {
+  FleetArchiveResult,
   FleetAssignResult,
   FleetErrorCode,
   FleetResult,
@@ -163,6 +165,23 @@ export function useFleet(initial: FleetResult<FleetSnapshot>) {
         driverId,
         confirmReplace,
       );
+      if (!result.ok) {
+        if (result.code === "migration_pending" || result.code === "access_denied") {
+          setError(result.code);
+        }
+        return result;
+      }
+      applySnapshot(result.snapshot);
+      return result;
+    },
+    [applySnapshot, getClient],
+  );
+
+  const archiveAmbulance = useCallback(
+    async (ambulanceId: string): Promise<FleetArchiveResult> => {
+      const supabase = getClient();
+      if (!supabase) return { ok: false, code: "unexpected" };
+      const result = await archiveHospitalAmbulance(supabase, ambulanceId);
       if (!result.ok) {
         if (result.code === "migration_pending" || result.code === "access_denied") {
           setError(result.code);
@@ -369,5 +388,6 @@ export function useFleet(initial: FleetResult<FleetSnapshot>) {
     refresh,
     saveAmbulance,
     assignDriver,
+    archiveAmbulance,
   };
 }

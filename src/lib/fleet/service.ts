@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   CreateFuelRecordInput,
   CreateMaintenanceRecordInput,
+  FleetArchiveResult,
   FleetAssignErrorCode,
   FleetAssignResult,
   FleetErrorCode,
@@ -10,6 +11,7 @@ import type {
   FleetHistoryPageSize,
   FleetHistoryPeriod,
   FleetMaintenanceHistoryPage,
+  FleetRecordDeleteResult,
   FleetRecordSaveErrorCode,
   FleetRecordSaveResult,
   FleetResult,
@@ -17,6 +19,8 @@ import type {
   FleetSnapshot,
   FleetVehicleRecords,
   SaveAmbulanceInput,
+  UpdateFuelRecordInput,
+  UpdateMaintenanceRecordInput,
 } from "./types";
 
 type RpcError = { code?: string | null; message?: string | null } | null;
@@ -158,7 +162,13 @@ function mapRecordError(error: RpcError): FleetRecordSaveErrorCode {
     return "mileage_invalid";
   }
   if (message.includes("ambulance_mileage_decrease")) return "mileage_decrease";
-  if (message.includes("ambulance_not_found")) return "not_found";
+  if (
+    message.includes("ambulance_not_found") ||
+    message.includes("fuel_record_scope_forbidden") ||
+    message.includes("maintenance_record_scope_forbidden")
+  ) {
+    return "not_found";
+  }
   if (
     message.includes("hospital_management_access_required") ||
     message.includes("hospital_manager_auth_required")
@@ -225,6 +235,92 @@ export async function createFleetMaintenanceRecord(
 
   if (error) return { ok: false, code: mapRecordError(error) };
   return { ok: true };
+}
+
+/**
+ * Edit one fuel/maintenance row of the caller's hospital (202611130006, draft).
+ * The RPC validates with the same rules as creation, reconciles the vehicle
+ * mileage atomically and the browser only sends the record id plus the fields.
+ */
+export async function updateFleetFuelRecord(
+  supabase: SupabaseClient,
+  input: UpdateFuelRecordInput,
+): Promise<FleetRecordSaveResult> {
+  const { error } = await supabase.rpc("hospital_manager_update_fuel_record", {
+    p_record_id: input.recordId,
+    p_liters: input.liters,
+    p_total_price: input.totalPrice,
+    p_price_per_liter: input.pricePerLiter,
+    p_mileage: input.mileage,
+    p_fuel_type: input.fuelType,
+    p_station: input.station,
+    p_notes: input.notes,
+    p_recorded_at: input.recordedAt,
+  });
+
+  if (error) return { ok: false, code: mapRecordError(error) };
+  return { ok: true };
+}
+
+export async function updateFleetMaintenanceRecord(
+  supabase: SupabaseClient,
+  input: UpdateMaintenanceRecordInput,
+): Promise<FleetRecordSaveResult> {
+  const { error } = await supabase.rpc(
+    "hospital_manager_update_maintenance_record",
+    {
+      p_record_id: input.recordId,
+      p_mechanic_name: input.mechanicName,
+      p_price: input.price,
+      p_repairs: input.repairs,
+      p_mileage: input.mileage,
+      p_maintenance_type: input.maintenanceType,
+      p_notes: input.notes,
+      p_next_maintenance_mileage: input.nextMaintenanceMileage,
+      p_next_maintenance_on: input.nextMaintenanceOn,
+      p_performed_at: input.performedAt,
+    },
+  );
+
+  if (error) return { ok: false, code: mapRecordError(error) };
+  return { ok: true };
+}
+
+type RawDeleteResponse = { deleted_id?: string; mileage?: number | null } | null;
+
+function readDeleteMileage(data: unknown): FleetRecordDeleteResult {
+  const response = data as RawDeleteResponse;
+  if (!response || typeof response.deleted_id !== "string") {
+    return { ok: false, code: "unexpected" };
+  }
+  const mileage = response.mileage;
+  return {
+    ok: true,
+    mileage: typeof mileage === "number" && Number.isFinite(mileage) ? mileage : null,
+  };
+}
+
+export async function deleteFleetFuelRecord(
+  supabase: SupabaseClient,
+  recordId: string,
+): Promise<FleetRecordDeleteResult> {
+  const { data, error } = await supabase.rpc("hospital_manager_delete_fuel_record", {
+    p_record_id: recordId,
+  });
+  if (error) return { ok: false, code: mapRecordError(error) };
+  return readDeleteMileage(data);
+}
+
+export async function deleteFleetMaintenanceRecord(
+  supabase: SupabaseClient,
+  recordId: string,
+): Promise<FleetRecordDeleteResult> {
+  const { data, error } = await supabase.rpc(
+    "hospital_manager_delete_maintenance_record",
+    { p_record_id: recordId },
+  );
+  if (error) return { ok: false, code: mapRecordError(error) };
+  return readDeleteMileage(data);
 }
 
 type RawSaveResponse = {
@@ -333,5 +429,50 @@ export async function assignHospitalAmbulanceDriver(
     };
   }
 
+  return { ok: false, code: "unexpected" };
+}
+
+type RawArchiveResponse = {
+  ok?: boolean;
+  snapshot?: FleetSnapshot;
+};
+
+/**
+ * Archive one hospital vehicle. The RPC derives the hospital from the caller's
+ * membership; the browser sends only the selected vehicle id.
+ */
+export async function archiveHospitalAmbulance(
+  supabase: SupabaseClient,
+  ambulanceId: string,
+): Promise<FleetArchiveResult> {
+  const { data, error } = await supabase.rpc(
+    "hospital_manager_archive_ambulance",
+    { p_ambulance_id: ambulanceId },
+  );
+
+  if (error) {
+    const message = normalizeMessage(error);
+    if (message.includes("ambulance_mission_active")) {
+      return { ok: false, code: "ambulance_mission_active" };
+    }
+    if (message.includes("ambulance_not_found")) {
+      return { ok: false, code: "not_found" };
+    }
+    const code = mapFleetError(error);
+    if (
+      code === "access_denied" ||
+      code === "migration_pending" ||
+      code === "not_found" ||
+      code === "network"
+    ) {
+      return { ok: false, code };
+    }
+    return { ok: false, code: "unexpected" };
+  }
+
+  const response = data as RawArchiveResponse | null;
+  if (response?.ok && response.snapshot) {
+    return { ok: true, snapshot: response.snapshot };
+  }
   return { ok: false, code: "unexpected" };
 }

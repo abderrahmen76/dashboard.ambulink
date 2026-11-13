@@ -7,6 +7,7 @@ import {
   Pencil,
   Phone,
   RefreshCw,
+  Trash2,
   UserPlus,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -66,6 +67,7 @@ export function FleetDetails({
   refreshing,
   onEdit,
   onAssign,
+  onDelete,
   onRefresh,
 }: {
   ambulance: FleetAmbulance | null;
@@ -73,6 +75,7 @@ export function FleetDetails({
   refreshing: boolean;
   onEdit: (ambulance: FleetAmbulance) => void;
   onAssign: (ambulance: FleetAmbulance) => void;
+  onDelete: (ambulance: FleetAmbulance) => void;
   onRefresh: () => void;
 }) {
   const { t, locale } = useI18n();
@@ -176,6 +179,16 @@ export function FleetDetails({
             className="grid size-8 place-items-center rounded-lg border border-line text-brand-800 transition hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:opacity-60"
           >
             <RefreshCw aria-hidden className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(ambulance)}
+            disabled={onMission}
+            aria-label={t("fleet.details.delete")}
+            title={onMission ? t("fleet.delete.missionBlocked") : t("fleet.details.delete")}
+            className="grid size-8 place-items-center rounded-lg border border-line text-accent-700 transition hover:bg-accent-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+          >
+            <Trash2 aria-hidden className="size-4" />
           </button>
         </div>
       </header>

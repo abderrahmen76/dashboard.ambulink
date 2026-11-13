@@ -1,4 +1,5 @@
 import { TUNIS_TIME_ZONE } from "@/lib/dashboard/format";
+import type { Locale } from "@/lib/i18n/config";
 import type { MessageKey, TranslateParams } from "@/lib/i18n/dictionaries";
 
 import type { AnalyticsBucket, MissionStatus, RangePreset } from "./types";
@@ -158,6 +159,22 @@ export function formatDurationSeconds(
 export function formatPercent(value: number | null | undefined): string | null {
   if (value === null || value === undefined || !Number.isFinite(value)) return null;
   return percentageFormatter.format(value);
+}
+
+const moneyFormatters = new Map<string, Intl.NumberFormat>();
+
+/** Same currency convention as the Flotte tab: latn digits, up to 3 decimals. */
+export function formatMoney(value: number, locale: Locale): string {
+  const numberLocale = locale === "ar" ? "ar-TN" : locale === "fr" ? "fr-TN" : "en-GB";
+  let formatter = moneyFormatters.get(numberLocale);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(numberLocale, {
+      maximumFractionDigits: 3,
+      numberingSystem: "latn",
+    });
+    moneyFormatters.set(numberLocale, formatter);
+  }
+  return `${formatter.format(value)} TND`;
 }
 
 export function shortReference(id: string): string {

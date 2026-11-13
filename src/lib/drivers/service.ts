@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
   DriverAssignmentFilter,
+  DriverDeleteResult,
   DriverErrorCode,
   DriverPageSize,
   DriverResult,
@@ -89,4 +90,47 @@ export async function fetchDriverStats(
     return { ok: false, code: "unexpected" };
   }
   return { ok: true, data: stats };
+}
+
+type RawDeactivateResponse = {
+  ok?: boolean;
+};
+
+/**
+ * Deactivate one hospital driver ("delete" in the Clinic UI). The RPC derives
+ * the hospital from the caller's membership; the browser sends only the
+ * selected driver id. No auth account, profile or history row is deleted.
+ */
+export async function deactivateHospitalDriver(
+  supabase: SupabaseClient,
+  driverId: string,
+): Promise<DriverDeleteResult> {
+  const { data, error } = await supabase.rpc(
+    "hospital_manager_deactivate_driver",
+    { p_driver_id: driverId },
+  );
+
+  if (error) {
+    const message = (error.message ?? "").toLowerCase();
+    if (message.includes("driver_mission_active")) {
+      return { ok: false, code: "driver_mission_active" };
+    }
+    if (message.includes("driver_not_found")) {
+      return { ok: false, code: "not_found" };
+    }
+    const code = mapDriverError(error);
+    if (
+      code === "access_denied" ||
+      code === "migration_pending" ||
+      code === "not_found" ||
+      code === "network"
+    ) {
+      return { ok: false, code };
+    }
+    return { ok: false, code: "unexpected" };
+  }
+
+  const response = data as RawDeactivateResponse | null;
+  if (response?.ok) return { ok: true };
+  return { ok: false, code: "unexpected" };
 }

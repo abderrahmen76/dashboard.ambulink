@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Banknote,
   FileText,
   Flag,
   MapPin,
@@ -11,8 +12,13 @@ import { useEffect } from "react";
 import { createPortal } from "react-dom";
 
 import { useI18n } from "@/lib/i18n/provider";
-import { formatMissionDateTime, shortReference } from "@/lib/missions/format";
+import {
+  formatMissionDateTime,
+  formatMoney,
+  shortReference,
+} from "@/lib/missions/format";
 import type { MissionRow } from "@/lib/missions/types";
+import { useMissionPrice } from "@/lib/missions/use-mission-price";
 
 import { MissionStatusPill } from "./mission-status-pill";
 
@@ -34,10 +40,13 @@ export function MissionDetailModal({
   row: MissionRow;
   onClose: () => void;
 }) {
-  const { t, dir } = useI18n();
+  const { t, dir, locale } = useI18n();
   const missing = t("ma.detail.notProvided");
   const text = (value: string | null) =>
     value && value.trim() !== "" ? value : missing;
+  // Null unless the mission was entered by its currently assigned clinic
+  // driver; the server owns that rule, so an ineligible mission renders no row.
+  const { price } = useMissionPrice(row.id);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -116,6 +125,18 @@ export function MissionDetailModal({
               }
             />
           </dl>
+
+          {price !== null ? (
+            <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-line/70 bg-surface/40 px-3 py-2">
+              <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-ink-soft">
+                <Banknote aria-hidden className="size-3.5 text-emerald-600" />
+                {t("ma.detail.price")}
+              </span>
+              <span className="text-sm font-semibold text-brand-900">
+                {formatMoney(price, locale)}
+              </span>
+            </div>
+          ) : null}
 
           <div className="mt-3 space-y-1.5 rounded-lg border border-line/70 bg-surface/40 px-3 py-2">
             <p className="flex items-start gap-1.5 text-xs text-ink">

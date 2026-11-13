@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type {
+  MissionPrice,
   MissionsAnalytics,
   MissionsAnalyticsQuery,
   MissionsErrorCode,
@@ -62,4 +63,21 @@ export async function fetchMissionsAnalytics(
   if (error) return { ok: false, code: mapMissionsError(error) };
   if (!data) return { ok: false, code: "unexpected" };
   return { ok: true, data: data as MissionsAnalytics };
+}
+
+/**
+ * Price of the selected mission. The RPC derives the hospital from the
+ * manager's membership and returns the price only when the mission was entered
+ * by its currently assigned clinic driver; otherwise `price` is null.
+ */
+export async function fetchMissionPrice(
+  supabase: SupabaseClient,
+  missionId: string,
+): Promise<MissionsResult<MissionPrice>> {
+  const { data, error } = await supabase.rpc("hospital_manager_mission_price", {
+    p_mission_id: missionId,
+  });
+  if (error) return { ok: false, code: mapMissionsError(error) };
+  if (!data) return { ok: false, code: "unexpected" };
+  return { ok: true, data: data as MissionPrice };
 }

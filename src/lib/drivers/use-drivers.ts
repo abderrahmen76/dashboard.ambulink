@@ -11,9 +11,10 @@ import { assignHospitalAmbulanceDriver } from "@/lib/fleet/service";
 import type { FleetAssignResult } from "@/lib/fleet/types";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
-import { fetchDriverStats, fetchDriversPage } from "./service";
+import { deactivateHospitalDriver, fetchDriverStats, fetchDriversPage } from "./service";
 import type {
   DriverAssignmentFilter,
+  DriverDeleteResult,
   DriverErrorCode,
   DriverPageSize,
   DriverResult,
@@ -384,6 +385,17 @@ export function useDrivers(
     [refresh],
   );
 
+  const deleteDriver = useCallback(
+    async (driverId: string): Promise<DriverDeleteResult> => {
+      const supabase = createSupabaseBrowserClient();
+      if (!supabase) return { ok: false, code: "unexpected" };
+      const result = await deactivateHospitalDriver(supabase, driverId);
+      if (result.ok && mountedRef.current) refresh();
+      return result;
+    },
+    [refresh],
+  );
+
   return {
     /** Last page received; while a new query loads it is the previous page. */
     data: state?.data ?? null,
@@ -400,6 +412,7 @@ export function useDrivers(
     setPageSize,
     refresh,
     assignDriver,
+    deleteDriver,
   };
 }
 

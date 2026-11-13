@@ -2,16 +2,19 @@
 
 import {
   AlertTriangle,
+  CheckCircle2,
   Plus,
   Radio,
   RefreshCw,
   WifiOff,
+  X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { LanguageSelect } from "@/components/language-select";
 import { RefreshingHint } from "@/components/dashboard/command-bar";
 import { useHospitalName } from "@/components/dashboard/hospital-name-context";
+import { FleetDeleteDialog } from "@/components/fleet/fleet-delete-dialog";
 import { FleetDetails } from "@/components/fleet/fleet-details";
 import { FleetDriverDialog } from "@/components/fleet/fleet-driver-dialog";
 import { FleetHistory } from "@/components/fleet/fleet-history";
@@ -106,7 +109,7 @@ function FleetWorkspace({
 }) {
   const { t } = useI18n();
   const fallbackHospitalName = useHospitalName();
-  const { snapshot, error, connection, refreshing, updatedAt, refresh, saveAmbulance, assignDriver } =
+  const { snapshot, error, connection, refreshing, updatedAt, refresh, saveAmbulance, assignDriver, archiveAmbulance } =
     useFleet(initialSnapshot);
 
   const [search, setSearch] = useTabState("fleet:search", "");
@@ -115,6 +118,8 @@ function FleetWorkspace({
   const [page, setPage] = useTabState("fleet:page", 1);
   const [selectedId, setSelectedId] = useTabState<string | null>("fleet:selected", null);
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [archivedLabel, setArchivedLabel] = useState<string | null>(null);
 
   const nowMs = useClock(updatedAt ?? 0, 15_000);
 
@@ -139,6 +144,10 @@ function FleetWorkspace({
   const dialogVehicle =
     dialog?.id != null
       ? snapshot?.ambulances.find((ambulance) => ambulance.id === dialog.id) ?? null
+      : null;
+  const deleteVehicle =
+    deleteId != null
+      ? snapshot?.ambulances.find((ambulance) => ambulance.id === deleteId) ?? null
       : null;
   const connectionStyle = CONNECTION_STYLES[connection];
 
@@ -253,6 +262,26 @@ function FleetWorkspace({
             </p>
           ) : null}
 
+          {archivedLabel ? (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800"
+            >
+              <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {t("fleet.delete.success", { vehicle: archivedLabel })}
+              </span>
+              <button
+                type="button"
+                onClick={() => setArchivedLabel(null)}
+                aria-label={t("dc.details.close")}
+                className="grid size-6 shrink-0 place-items-center rounded-md text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
+                <X aria-hidden className="size-3.5" />
+              </button>
+            </div>
+          ) : null}
+
           <FleetKpiGrid kpis={kpis} />
 
           {snapshot ? (
@@ -296,6 +325,7 @@ function FleetWorkspace({
                   refreshing={refreshing}
                   onEdit={(ambulance) => setDialog({ kind: "edit", id: ambulance.id })}
                   onAssign={(ambulance) => setDialog({ kind: "assign", id: ambulance.id })}
+                  onDelete={(ambulance) => setDeleteId(ambulance.id)}
                   onRefresh={() => void refresh()}
                 />
               </div>
@@ -348,6 +378,25 @@ function FleetWorkspace({
           onClose={() => setDialog(null)}
           onAssign={assignDriver}
           onAssigned={() => setDialog(null)}
+        />
+      ) : null}
+
+      {deleteVehicle ? (
+        <FleetDeleteDialog
+          key={deleteVehicle.id}
+          ambulance={deleteVehicle}
+          onClose={() => setDeleteId(null)}
+          onArchive={async (ambulanceId) => {
+            const result = await archiveAmbulance(ambulanceId);
+            return result.ok ? null : result.code;
+          }}
+          onArchived={() => {
+            setArchivedLabel(
+              deleteVehicle.label?.trim() || deleteVehicle.plate_number?.trim() || "—",
+            );
+            setSelectedId(null);
+            setDeleteId(null);
+          }}
         />
       ) : null}
 

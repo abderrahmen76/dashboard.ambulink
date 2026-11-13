@@ -18,6 +18,7 @@ import { useHospitalName } from "@/components/dashboard/hospital-name-context";
 import { SignOutButton } from "@/components/sign-out-button";
 import { DriverAmbulanceDialog } from "@/components/drivers/driver-ambulance-dialog";
 import { DriverCreateDialog } from "@/components/drivers/driver-create-dialog";
+import { DriverDeleteDialog } from "@/components/drivers/driver-delete-dialog";
 import { DriverDetails } from "@/components/drivers/driver-details";
 import { DriversKpiGrid } from "@/components/drivers/drivers-kpi-grid";
 import { DriversTable } from "@/components/drivers/drivers-table";
@@ -111,6 +112,8 @@ function DriversWorkspace({
   const [assignId, setAssignId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createdName, setCreatedName] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [removedName, setRemovedName] = useState<string | null>(null);
 
   const {
     data,
@@ -127,6 +130,7 @@ function DriversWorkspace({
     setPageSize,
     refresh,
     assignDriver,
+    deleteDriver,
   } = useDrivers(
     initialPage,
     { search: debouncedSearch, status, assignment },
@@ -140,6 +144,8 @@ function DriversWorkspace({
   );
   const dialogDriver =
     data?.items.find((driver) => driver.id === assignId) ?? null;
+  const deleteDriverRow =
+    data?.items.find((driver) => driver.id === deleteId) ?? null;
 
   const hospitalName = data?.hospital.name ?? fallbackHospitalName;
   const connectionStyle = CONNECTION_STYLES[connection];
@@ -253,6 +259,26 @@ function DriversWorkspace({
             </div>
           ) : null}
 
+          {removedName ? (
+            <div
+              role="status"
+              className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800"
+            >
+              <CheckCircle2 aria-hidden className="mt-0.5 size-4 shrink-0" />
+              <span className="min-w-0 flex-1">
+                {t("drivers.delete.success", { name: removedName })}
+              </span>
+              <button
+                type="button"
+                onClick={() => setRemovedName(null)}
+                aria-label={t("dc.details.close")}
+                className="grid size-6 shrink-0 place-items-center rounded-md text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
+                <X aria-hidden className="size-3.5" />
+              </button>
+            </div>
+          ) : null}
+
           {!data && !loading ? (
             <section className="rounded-2xl border border-line/70 bg-white p-6 shadow-soft">
               <div className="flex items-start gap-3">
@@ -344,6 +370,7 @@ function DriversWorkspace({
                   statsError={statsError}
                   refreshing={refreshing}
                   onAssign={(driver) => setAssignId(driver.id)}
+                  onDelete={(driver) => setDeleteId(driver.id)}
                   onRefresh={() => void refresh()}
                 />
               </div>
@@ -379,6 +406,23 @@ function DriversWorkspace({
           onClose={() => setAssignId(null)}
           onAssign={assignDriver}
           onAssigned={() => setAssignId(null)}
+        />
+      ) : null}
+
+      {deleteDriverRow ? (
+        <DriverDeleteDialog
+          key={deleteDriverRow.id}
+          driver={deleteDriverRow}
+          onClose={() => setDeleteId(null)}
+          onDeactivate={async (driverId) => {
+            const result = await deleteDriver(driverId);
+            return result.ok ? null : result.code;
+          }}
+          onDeactivated={() => {
+            setRemovedName(deleteDriverRow.full_name?.trim() || "—");
+            setSelectedId(null);
+            setDeleteId(null);
+          }}
         />
       ) : null}
 

@@ -15,8 +15,12 @@ import type {
   CreateFuelRecordInput,
   CreateMaintenanceRecordInput,
   FleetAmbulance,
+  FleetFuelRecord,
+  FleetMaintenanceRecord,
   FleetRecordSaveErrorCode,
   FleetRecordSaveResult,
+  UpdateFuelRecordInput,
+  UpdateMaintenanceRecordInput,
 } from "@/lib/fleet/types";
 import type { MessageKey } from "@/lib/i18n/dictionaries";
 import { useI18n } from "@/lib/i18n/provider";
@@ -67,6 +71,20 @@ function toIsoDateTime(raw: string): string | null {
   return date.toISOString();
 }
 
+/** ISO timestamp → value accepted by `<input type="datetime-local">`. */
+function toLocalDateTimeInput(iso: string | null): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** Numeric column → controlled input value (empty when the column is null). */
+function toInputValue(value: number | null): string {
+  return value != null ? String(value) : "";
+}
+
 function Field({
   id,
   label,
@@ -101,6 +119,7 @@ function RecordDialogShell({
   titleId,
   title,
   subtitle,
+  submitKey,
   onClose,
   onSubmit,
   pending,
@@ -110,6 +129,7 @@ function RecordDialogShell({
   titleId: string;
   title: string;
   subtitle: string;
+  submitKey: MessageKey;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   pending: boolean;
@@ -188,7 +208,7 @@ function RecordDialogShell({
               className="inline-flex h-10 items-center gap-2 rounded-lg bg-brand-800 px-4 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 disabled:cursor-progress disabled:opacity-70"
             >
               {pending ? <Loader2 aria-hidden className="size-4 animate-spin" /> : null}
-              {pending ? t("fleet.record.saving") : t("fleet.record.save")}
+              {pending ? t("fleet.record.saving") : t(submitKey)}
             </button>
           </div>
         </form>
@@ -205,28 +225,39 @@ function vehicleSubtitle(ambulance: FleetAmbulance): string {
 
 export function FleetFuelDialog({
   ambulance,
+  record = null,
   onClose,
-  onSave,
+  onCreate,
+  onUpdate,
   onSaved,
 }: {
   ambulance: FleetAmbulance;
+  record?: FleetFuelRecord | null;
   onClose: () => void;
-  onSave: (input: CreateFuelRecordInput) => Promise<FleetRecordSaveResult>;
+  onCreate: (input: CreateFuelRecordInput) => Promise<FleetRecordSaveResult>;
+  onUpdate: (input: UpdateFuelRecordInput) => Promise<FleetRecordSaveResult>;
   onSaved: () => void;
 }) {
   const { t } = useI18n();
   const titleId = useId();
+  const editing = record !== null;
   const [requestKey] = useState(newRequestKey);
-  const [price, setPrice] = useState("");
-  const [liters, setLiters] = useState("");
-  const [pricePerLiter, setPricePerLiter] = useState("");
-  const [mileage, setMileage] = useState(
-    ambulance.mileage != null ? String(ambulance.mileage) : "",
+  const [price, setPrice] = useState(() => toInputValue(record?.total_price ?? null));
+  const [liters, setLiters] = useState(() => toInputValue(record?.liters ?? null));
+  const [pricePerLiter, setPricePerLiter] = useState(() =>
+    toInputValue(record?.price_per_liter ?? null),
   );
-  const [fuelType, setFuelType] = useState("");
-  const [station, setStation] = useState("");
-  const [recordedAt, setRecordedAt] = useState("");
-  const [notes, setNotes] = useState("");
+  const [mileage, setMileage] = useState(() =>
+    record?.mileage != null
+      ? toInputValue(record.mileage)
+      : toInputValue(ambulance.mileage),
+  );
+  const [fuelType, setFuelType] = useState(() => record?.fuel_type ?? "");
+  const [station, setStation] = useState(() => record?.station ?? "");
+  const [recordedAt, setRecordedAt] = useState(() =>
+    toLocalDateTimeInput(record?.recorded_at ?? null),
+  );
+  const [notes, setNotes] = useState(() => record?.notes ?? "");
   const [validation, setValidation] = useState<Validation>(null);
   const [quantityError, setQuantityError] = useState(false);
   const [unitError, setUnitError] = useState(false);
@@ -278,9 +309,8 @@ export function FleetFuelDialog({
     setUnitError(false);
     setServerError(null);
     setPending(true);
-    const result = await onSave({
-      requestKey,
-      ambulanceId: ambulance.id,
+
+    const fields = {
       liters: parsedLiters,
       totalPrice,
       pricePerLiter: parsedPerLiter,
@@ -289,7 +319,11 @@ export function FleetFuelDialog({
       station: station.trim() || null,
       notes: notes.trim() || null,
       recordedAt: toIsoDateTime(recordedAt),
-    });
+    };
+    const result =
+      editing && record
+        ? await onUpdate({ recordId: record.id, ...fields })
+        : await onCreate({ requestKey, ambulanceId: ambulance.id, ...fields });
     if (!aliveRef.current) return;
     setPending(false);
     if (result.ok) {
@@ -302,8 +336,9 @@ export function FleetFuelDialog({
   return (
     <RecordDialogShell
       titleId={titleId}
-      title={t("fleet.fuel.formTitle")}
+      title={t(editing ? "fleet.fuel.editTitle" : "fleet.fuel.formTitle")}
       subtitle={vehicleSubtitle(ambulance)}
+      submitKey={editing ? "fleet.record.update" : "fleet.record.save"}
       onClose={onClose}
       onSubmit={submit}
       pending={pending}
@@ -458,31 +493,46 @@ export function FleetFuelDialog({
 
 export function FleetMaintenanceDialog({
   ambulance,
+  record = null,
   onClose,
-  onSave,
+  onCreate,
+  onUpdate,
   onSaved,
 }: {
   ambulance: FleetAmbulance;
+  record?: FleetMaintenanceRecord | null;
   onClose: () => void;
-  onSave: (
+  onCreate: (
     input: CreateMaintenanceRecordInput,
+  ) => Promise<FleetRecordSaveResult>;
+  onUpdate: (
+    input: UpdateMaintenanceRecordInput,
   ) => Promise<FleetRecordSaveResult>;
   onSaved: () => void;
 }) {
   const { t } = useI18n();
   const titleId = useId();
+  const editing = record !== null;
   const [requestKey] = useState(newRequestKey);
-  const [price, setPrice] = useState("");
-  const [mileage, setMileage] = useState(
-    ambulance.mileage != null ? String(ambulance.mileage) : "",
+  const [price, setPrice] = useState(() => toInputValue(record?.price ?? null));
+  const [mileage, setMileage] = useState(() =>
+    record?.mileage != null
+      ? toInputValue(record.mileage)
+      : toInputValue(ambulance.mileage),
   );
-  const [maintenanceType, setMaintenanceType] = useState("");
-  const [mechanicName, setMechanicName] = useState("");
-  const [repairs, setRepairs] = useState("");
-  const [nextMileage, setNextMileage] = useState("");
-  const [nextDate, setNextDate] = useState("");
-  const [performedAt, setPerformedAt] = useState("");
-  const [notes, setNotes] = useState("");
+  const [maintenanceType, setMaintenanceType] = useState(
+    () => record?.maintenance_type ?? "",
+  );
+  const [mechanicName, setMechanicName] = useState(() => record?.mechanic_name ?? "");
+  const [repairs, setRepairs] = useState(() => record?.repairs ?? "");
+  const [nextMileage, setNextMileage] = useState(() =>
+    toInputValue(record?.next_maintenance_mileage ?? null),
+  );
+  const [nextDate, setNextDate] = useState(() => record?.next_maintenance_on ?? "");
+  const [performedAt, setPerformedAt] = useState(() =>
+    toLocalDateTimeInput(record?.performed_at ?? null),
+  );
+  const [notes, setNotes] = useState(() => record?.notes ?? "");
   const [validation, setValidation] = useState<Validation>(null);
   const [nextMileageError, setNextMileageError] = useState(false);
   const [serverError, setServerError] = useState<FleetRecordSaveErrorCode | null>(null);
@@ -530,9 +580,8 @@ export function FleetMaintenanceDialog({
     setNextMileageError(false);
     setServerError(null);
     setPending(true);
-    const result = await onSave({
-      requestKey,
-      ambulanceId: ambulance.id,
+
+    const fields = {
       mechanicName: mechanicName.trim() || null,
       price: parsedPrice,
       repairs: repairs.trim() || null,
@@ -542,7 +591,11 @@ export function FleetMaintenanceDialog({
       nextMaintenanceMileage: parsedNextMileage,
       nextMaintenanceOn: nextDate.trim() || null,
       performedAt: toIsoDateTime(performedAt),
-    });
+    };
+    const result =
+      editing && record
+        ? await onUpdate({ recordId: record.id, ...fields })
+        : await onCreate({ requestKey, ambulanceId: ambulance.id, ...fields });
     if (!aliveRef.current) return;
     setPending(false);
     if (result.ok) {
@@ -555,8 +608,9 @@ export function FleetMaintenanceDialog({
   return (
     <RecordDialogShell
       titleId={titleId}
-      title={t("fleet.maintenance.formTitle")}
+      title={t(editing ? "fleet.maintenance.editTitle" : "fleet.maintenance.formTitle")}
       subtitle={vehicleSubtitle(ambulance)}
+      submitKey={editing ? "fleet.record.update" : "fleet.record.save"}
       onClose={onClose}
       onSubmit={submit}
       pending={pending}

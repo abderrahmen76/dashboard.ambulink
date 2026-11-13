@@ -5,6 +5,7 @@ import {
   Clock3,
   Phone,
   RefreshCw,
+  Trash2,
   UserCog,
   Users,
 } from "lucide-react";
@@ -65,6 +66,7 @@ export function DriverDetails({
   statsError,
   refreshing,
   onAssign,
+  onDelete,
   onRefresh,
 }: {
   driver: DriverRow | null;
@@ -73,6 +75,7 @@ export function DriverDetails({
   statsError: DriverErrorCode | null;
   refreshing: boolean;
   onAssign: (driver: DriverRow) => void;
+  onDelete: (driver: DriverRow) => void;
   onRefresh: () => void;
 }) {
   const { t, locale } = useI18n();
@@ -130,6 +133,16 @@ export function DriverDetails({
             className="grid size-8 place-items-center rounded-lg border border-line text-brand-800 transition hover:bg-brand-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
           >
             <UserCog aria-hidden className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(driver)}
+            disabled={busy}
+            aria-label={t("drivers.details.delete")}
+            title={busy ? t("drivers.delete.missionBlocked") : t("drivers.details.delete")}
+            className="grid size-8 place-items-center rounded-lg border border-line text-accent-700 transition hover:bg-accent-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+          >
+            <Trash2 aria-hidden className="size-4" />
           </button>
           <button
             type="button"

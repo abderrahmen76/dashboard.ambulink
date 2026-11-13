@@ -222,6 +222,22 @@ export type FleetAssignResult =
     };
 
 /**
+ * "Delete" from the Fleet tab archives the vehicle: the row, its fuel and
+ * maintenance history and its missions are preserved.
+ */
+export type FleetArchiveErrorCode =
+  | "ambulance_mission_active"
+  | "access_denied"
+  | "migration_pending"
+  | "not_found"
+  | "network"
+  | "unexpected";
+
+export type FleetArchiveResult =
+  | { ok: true; snapshot: FleetSnapshot }
+  | { ok: false; code: FleetArchiveErrorCode };
+
+/**
  * Inputs for `hospital_manager_create_fuel_record` / `..._maintenance_record`
  * (202611100018, draft). The hospital is never part of the input: the RPC
  * derives it from the caller's membership.
@@ -253,6 +269,37 @@ export type CreateMaintenanceRecordInput = {
   performedAt: string | null;
 };
 
+/**
+ * Inputs for `hospital_manager_update_fuel_record` /
+ * `..._update_maintenance_record` (202611130006, draft). The record id is the
+ * only scope the browser supplies: the hospital is derived from the caller's
+ * membership and the record is re-checked against it server-side.
+ */
+export type UpdateFuelRecordInput = {
+  recordId: string;
+  liters: number | null;
+  totalPrice: number;
+  pricePerLiter: number | null;
+  mileage: number;
+  fuelType: string | null;
+  station: string | null;
+  notes: string | null;
+  recordedAt: string | null;
+};
+
+export type UpdateMaintenanceRecordInput = {
+  recordId: string;
+  mechanicName: string | null;
+  price: number;
+  repairs: string | null;
+  mileage: number;
+  maintenanceType: string | null;
+  notes: string | null;
+  nextMaintenanceMileage: number | null;
+  nextMaintenanceOn: string | null;
+  performedAt: string | null;
+};
+
 export type FleetRecordSaveErrorCode =
   | "price_required"
   | "mileage_required"
@@ -268,4 +315,12 @@ export type FleetRecordSaveErrorCode =
 
 export type FleetRecordSaveResult =
   | { ok: true }
+  | { ok: false; code: FleetRecordSaveErrorCode };
+
+/**
+ * Result of a record delete: the RPC echoes the vehicle's reconciled mileage so
+ * the client can refresh the registry with the authoritative value.
+ */
+export type FleetRecordDeleteResult =
+  | { ok: true; mileage: number | null }
   | { ok: false; code: FleetRecordSaveErrorCode };

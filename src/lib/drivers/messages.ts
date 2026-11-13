@@ -1,6 +1,10 @@
 import type { MessageKey } from "@/lib/i18n/dictionaries";
 
-import type { CreateHospitalDriverErrorCode, DriverErrorCode } from "./types";
+import type {
+  CreateHospitalDriverErrorCode,
+  DriverDeleteErrorCode,
+  DriverErrorCode,
+} from "./types";
 
 const ERROR_KEYS: Record<DriverErrorCode, MessageKey> = {
   migration_pending: "drivers.error.migration",
@@ -36,4 +40,19 @@ export function driverCreateErrorMessageKey(
   code: CreateHospitalDriverErrorCode,
 ): MessageKey {
   return CREATE_ERROR_KEYS[code];
+}
+
+const DELETE_ERROR_KEYS: Record<DriverDeleteErrorCode, MessageKey> = {
+  driver_mission_active: "drivers.delete.error.mission",
+  access_denied: "drivers.delete.error.access",
+  migration_pending: "drivers.delete.error.migration",
+  not_found: "drivers.delete.error.notFound",
+  network: "drivers.delete.error.network",
+  unexpected: "drivers.delete.error.unexpected",
+};
+
+export function driverDeleteErrorMessageKey(
+  code: DriverDeleteErrorCode,
+): MessageKey {
+  return DELETE_ERROR_KEYS[code];
 }

@@ -105,6 +105,22 @@ export type DriverResult<T> =
   | { ok: true; data: T }
   | { ok: false; code: DriverErrorCode };
 
+/**
+ * "Delete" from the Drivers tab deactivates the hospital membership: the auth
+ * account, profile, missions and reports are preserved.
+ */
+export type DriverDeleteErrorCode =
+  | "driver_mission_active"
+  | "access_denied"
+  | "migration_pending"
+  | "not_found"
+  | "network"
+  | "unexpected";
+
+export type DriverDeleteResult =
+  | { ok: true }
+  | { ok: false; code: DriverDeleteErrorCode };
+
 /** Result of the manager → Edge Function driver provisioning call. */
 export type CreateHospitalDriverErrorCode =
   | "validation_name"

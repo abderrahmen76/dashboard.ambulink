@@ -91,6 +91,17 @@ export type MissionRow = {
   ambulance_label: string | null;
 };
 
+/**
+ * `hospital_manager_mission_price` (202611130005, draft). `eligible` is
+ * computed server-side; `price` is null whenever the mission is not eligible,
+ * so the client never has to re-derive the rule.
+ */
+export type MissionPrice = {
+  mission_id: string;
+  eligible: boolean;
+  price: number | null;
+};
+
 export type MissionsAnalytics = {
   server_now: string;
   hospital: { id: string; name: string };

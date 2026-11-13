@@ -1,6 +1,7 @@
 import type { MessageKey } from "@/lib/i18n/dictionaries";
 
 import type {
+  FleetArchiveErrorCode,
   FleetAssignErrorCode,
   FleetErrorCode,
   FleetRecordSaveErrorCode,
@@ -53,6 +54,21 @@ const ASSIGN_KEYS: Record<FleetAssignErrorCode, MessageKey> = {
 
 export function fleetAssignErrorMessageKey(code: FleetAssignErrorCode): MessageKey {
   return ASSIGN_KEYS[code];
+}
+
+const ARCHIVE_KEYS: Record<FleetArchiveErrorCode, MessageKey> = {
+  ambulance_mission_active: "fleet.delete.error.mission",
+  access_denied: "fleet.delete.error.access",
+  migration_pending: "fleet.delete.error.migration",
+  not_found: "fleet.delete.error.notFound",
+  network: "fleet.delete.error.network",
+  unexpected: "fleet.delete.error.unexpected",
+};
+
+export function fleetArchiveErrorMessageKey(
+  code: FleetArchiveErrorCode,
+): MessageKey {
+  return ARCHIVE_KEYS[code];
 }
 
 const RECORD_KEYS: Record<FleetRecordSaveErrorCode, MessageKey> = {

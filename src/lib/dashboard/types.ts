@@ -144,6 +144,18 @@ export type MissionCancelResult = {
   snapshot: DashboardSnapshot;
 };
 
+/**
+ * Assigned driver contact for one mission, resolved from `profiles` by the
+ * mission's `driver_id` (202611130004, draft). It is deliberately not part of
+ * the mission payload: phones are fetched only for the selected mission.
+ */
+export type DriverContact = {
+  mission_id: string;
+  driver_id: string | null;
+  driver_name: string | null;
+  driver_phone: string | null;
+};
+
 /** One ambulance company linked to the caller's hospital (202611110009). */
 export type CompanyOption = {
   id: string;

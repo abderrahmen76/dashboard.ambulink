@@ -7,6 +7,7 @@ import { canCancelMission, formatDateTime } from "@/lib/dashboard/format";
 import { dashboardErrorMessageKey } from "@/lib/dashboard/messages";
 import type { DashboardErrorCode } from "@/lib/dashboard/service";
 import type { DashboardDriver, DashboardMission } from "@/lib/dashboard/types";
+import { useDriverContact } from "@/lib/dashboard/use-driver-contact";
 import { useI18n } from "@/lib/i18n/provider";
 import { formatTunisianPhone, normalizeTunisianPhoneDigits, toE164 } from "@/lib/phone";
 
@@ -43,6 +44,10 @@ export function MissionDetails({
   const [choice, setChoice] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<DashboardErrorCode | null>(null);
+  const driverContact = useDriverContact(
+    mission?.id ?? null,
+    mission?.driver_id ?? null,
+  );
 
   if (!mission) {
     return (
@@ -57,6 +62,11 @@ export function MissionDetails({
   );
   const digits = normalizeTunisianPhoneDigits(mission.patient_phone ?? "");
   const phoneLabel = formatTunisianPhone(mission.patient_phone);
+  const driverPhone = driverContact.contact?.driver_phone ?? null;
+  const driverDigits = normalizeTunisianPhoneDigits(driverPhone ?? "");
+  const driverPhoneLabel = formatTunisianPhone(driverPhone);
+  const driverName =
+    driverContact.contact?.driver_name?.trim() || mission.driver_name?.trim() || null;
   const companyMission = mission.manager_entry && mission.dispatch_mode === "company";
   const canRedispatch =
     mission.manager_entry &&
@@ -116,6 +126,47 @@ export function MissionDetails({
           <X aria-hidden className="size-4" />
         </button>
       </div>
+
+      {mission.driver_id ? (
+        <section
+          aria-label={t("dc.details.driverContact")}
+          className="mt-4 flex flex-col gap-3 rounded-xl border border-line/70 bg-surface/60 p-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-brand-100 text-brand-800">
+              <UserRound aria-hidden className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-ink-soft">
+                {t("dc.details.driverContact")}
+              </p>
+              <p className="truncate text-sm font-semibold text-brand-900">
+                {driverName ?? t("dc.details.notAssigned")}
+              </p>
+            </div>
+          </div>
+          {driverDigits ? (
+            <a
+              href={`tel:${toE164(driverDigits)}`}
+              aria-label={t("dc.details.callDriver")}
+              title={t("dc.details.callDriver")}
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg bg-brand-800 px-3.5 text-sm font-semibold text-white transition hover:bg-brand-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            >
+              <Phone aria-hidden className="size-4" />
+              {driverPhoneLabel}
+            </a>
+          ) : driverContact.loading ? (
+            <span className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 text-xs text-ink-soft">
+              <Loader2 aria-hidden className="size-4 animate-spin" />
+              {t("dc.details.driverContactLoading")}
+            </span>
+          ) : (
+            <span className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-line bg-white px-3 text-xs text-ink-soft">
+              {t("dc.details.driverPhoneUnavailable")}
+            </span>
+          )}
+        </section>
+      ) : null}
 
       <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Row

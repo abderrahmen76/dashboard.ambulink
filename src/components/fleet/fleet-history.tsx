@@ -8,8 +8,10 @@ import {
   ChevronRight,
   Fuel,
   History,
+  Pencil,
   Plus,
   RefreshCw,
+  Trash2,
   Wrench,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -19,6 +21,10 @@ import { fleetErrorMessageKey } from "@/lib/fleet/messages";
 import {
   createFleetFuelRecord,
   createFleetMaintenanceRecord,
+  deleteFleetFuelRecord,
+  deleteFleetMaintenanceRecord,
+  updateFleetFuelRecord,
+  updateFleetMaintenanceRecord,
 } from "@/lib/fleet/service";
 import type {
   CreateFuelRecordInput,
@@ -31,7 +37,10 @@ import type {
   FleetHistoryPeriod,
   FleetMaintenanceHistoryStats,
   FleetMaintenanceRecord,
+  FleetRecordDeleteResult,
   FleetRecordSaveResult,
+  UpdateFuelRecordInput,
+  UpdateMaintenanceRecordInput,
 } from "@/lib/fleet/types";
 import { useVehicleHistory, type HistorySection } from "@/lib/fleet/use-history";
 import type { Locale } from "@/lib/i18n/config";
@@ -39,6 +48,7 @@ import type { MessageKey } from "@/lib/i18n/dictionaries";
 import { useI18n } from "@/lib/i18n/provider";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
+import { FleetRecordDeleteDialog } from "./fleet-record-delete-dialog";
 import { FleetFuelDialog, FleetMaintenanceDialog } from "./fleet-record-dialog";
 
 const PERIODS: FleetHistoryPeriod[] = ["month", "3m", "6m", "year", "all"];
@@ -74,6 +84,18 @@ function formatMoney(value: number, locale: Locale): string {
 
 type DialogKind = "fuel" | "maintenance" | null;
 
+type RecordTarget =
+  | { kind: "fuel"; record: FleetFuelRecord }
+  | { kind: "maintenance"; record: FleetMaintenanceRecord };
+
+type NoticeKind = "added" | "updated" | "deleted";
+
+const NOTICE_KEYS: Record<NoticeKind, MessageKey> = {
+  added: "fleet.record.success",
+  updated: "fleet.record.updated",
+  deleted: "fleet.record.deleted",
+};
+
 type PanelController = Pick<
   HistorySection<FleetFuelHistoryPage>,
   | "period"
@@ -99,9 +121,11 @@ export function FleetHistory({
   hospitalId: string | null;
   onSaved: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [dialog, setDialog] = useState<DialogKind>(null);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [editing, setEditing] = useState<RecordTarget | null>(null);
+  const [deleting, setDeleting] = useState<RecordTarget | null>(null);
+  const [notice, setNotice] = useState<NoticeKind | null>(null);
   const ambulanceId = ambulance?.id ?? null;
 
   const { fuel, maintenance } = useVehicleHistory(ambulanceId);
@@ -206,20 +230,37 @@ export function FleetHistory({
   }, [hospitalId, fuelRefresh, maintenanceRefresh]);
 
   useEffect(() => {
-    if (savedAt === null) return;
-    const id = setTimeout(() => setSavedAt(null), 5_000);
+    if (notice === null) return;
+    const id = setTimeout(() => setNotice(null), 5_000);
     return () => clearTimeout(id);
-  }, [savedAt]);
+  }, [notice]);
 
   // Only the section that received the entry is refetched; the other page and
-  // the registry selection stay untouched.
-  const handleSaved = (kind: Exclude<DialogKind, null>) => {
-    setDialog(null);
+  // the registry selection stay untouched. The page itself is preserved unless
+  // a deletion emptied it, which the history hook then steps back from.
+  const refreshSection = (kind: Exclude<DialogKind, null>) => {
     if (kind === "fuel") fuelRefresh();
     else maintenanceRefresh();
-    setSavedAt(Date.now());
     // Mileage/KPIs live one level up; the selection is kept.
     onSaved();
+  };
+
+  const handleCreated = (kind: Exclude<DialogKind, null>) => {
+    setDialog(null);
+    refreshSection(kind);
+    setNotice("added");
+  };
+
+  const handleUpdated = (kind: Exclude<DialogKind, null>) => {
+    setEditing(null);
+    refreshSection(kind);
+    setNotice("updated");
+  };
+
+  const handleDeleted = (kind: Exclude<DialogKind, null>) => {
+    setDeleting(null);
+    refreshSection(kind);
+    setNotice("deleted");
   };
 
   const saveFuel = async (
@@ -238,6 +279,36 @@ export function FleetHistory({
     return createFleetMaintenanceRecord(supabase, input);
   };
 
+  const updateFuel = async (
+    input: UpdateFuelRecordInput,
+  ): Promise<FleetRecordSaveResult> => {
+    const supabase = createSupabaseBrowserClient();
+    if (!supabase) return { ok: false, code: "unexpected" };
+    return updateFleetFuelRecord(supabase, input);
+  };
+
+  const updateMaintenance = async (
+    input: UpdateMaintenanceRecordInput,
+  ): Promise<FleetRecordSaveResult> => {
+    const supabase = createSupabaseBrowserClient();
+    if (!supabase) return { ok: false, code: "unexpected" };
+    return updateFleetMaintenanceRecord(supabase, input);
+  };
+
+  const removeFuel = async (recordId: string): Promise<FleetRecordDeleteResult> => {
+    const supabase = createSupabaseBrowserClient();
+    if (!supabase) return { ok: false, code: "unexpected" };
+    return deleteFleetFuelRecord(supabase, recordId);
+  };
+
+  const removeMaintenance = async (
+    recordId: string,
+  ): Promise<FleetRecordDeleteResult> => {
+    const supabase = createSupabaseBrowserClient();
+    if (!supabase) return { ok: false, code: "unexpected" };
+    return deleteFleetMaintenanceRecord(supabase, recordId);
+  };
+
   const vehicleLabel = ambulance
     ? [ambulance.label?.trim(), ambulance.plate_number?.trim()]
         .filter(Boolean)
@@ -246,6 +317,22 @@ export function FleetHistory({
 
   const fuelItems = fuel.data?.items ?? [];
   const maintenanceItems = maintenance.data?.items ?? [];
+
+  const fuelSummary = (record: FleetFuelRecord): string =>
+    [
+      record.total_price !== null
+        ? formatMoney(record.total_price, locale)
+        : record.liters !== null
+          ? `${formatDecimal(record.liters, locale, 3)} L`
+          : t("fleet.fuel.entry"),
+      formatDateTime(record.recorded_at, "—"),
+    ].join(" · ");
+
+  const maintenanceSummary = (record: FleetMaintenanceRecord): string =>
+    [
+      record.maintenance_type?.trim() || t("fleet.maintenance.entry"),
+      formatDateTime(record.performed_at, "—"),
+    ].join(" · ");
 
   return (
     <>
@@ -275,13 +362,13 @@ export function FleetHistory({
             </div>
           </div>
 
-          {savedAt !== null ? (
+          {notice !== null ? (
             <p
               role="status"
               className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700"
             >
               <CheckCircle2 aria-hidden className="size-3.5" />
-              {t("fleet.record.success")}
+              {t(NOTICE_KEYS[notice])}
             </p>
           ) : null}
         </header>
@@ -305,7 +392,12 @@ export function FleetHistory({
               onRetry={fuelRefresh}
             >
               {fuelItems.map((record) => (
-                <FuelRow key={record.id} record={record} />
+                <FuelRow
+                  key={record.id}
+                  record={record}
+                  onEdit={() => setEditing({ kind: "fuel", record })}
+                  onDelete={() => setDeleting({ kind: "fuel", record })}
+                />
               ))}
             </HistoryPanel>
 
@@ -326,7 +418,12 @@ export function FleetHistory({
               onRetry={maintenanceRefresh}
             >
               {maintenanceItems.map((record) => (
-                <MaintenanceRow key={record.id} record={record} />
+                <MaintenanceRow
+                  key={record.id}
+                  record={record}
+                  onEdit={() => setEditing({ kind: "maintenance", record })}
+                  onDelete={() => setDeleting({ kind: "maintenance", record })}
+                />
               ))}
             </HistoryPanel>
           </div>
@@ -338,8 +435,9 @@ export function FleetHistory({
           key={`fuel:${ambulance.id}`}
           ambulance={ambulance}
           onClose={() => setDialog(null)}
-          onSave={saveFuel}
-          onSaved={() => handleSaved("fuel")}
+          onCreate={saveFuel}
+          onUpdate={updateFuel}
+          onSaved={() => handleCreated("fuel")}
         />
       ) : null}
 
@@ -348,8 +446,51 @@ export function FleetHistory({
           key={`maintenance:${ambulance.id}`}
           ambulance={ambulance}
           onClose={() => setDialog(null)}
-          onSave={saveMaintenance}
-          onSaved={() => handleSaved("maintenance")}
+          onCreate={saveMaintenance}
+          onUpdate={updateMaintenance}
+          onSaved={() => handleCreated("maintenance")}
+        />
+      ) : null}
+
+      {ambulance && editing?.kind === "fuel" ? (
+        <FleetFuelDialog
+          key={`fuel-edit:${editing.record.id}`}
+          ambulance={ambulance}
+          record={editing.record}
+          onClose={() => setEditing(null)}
+          onCreate={saveFuel}
+          onUpdate={updateFuel}
+          onSaved={() => handleUpdated("fuel")}
+        />
+      ) : null}
+
+      {ambulance && editing?.kind === "maintenance" ? (
+        <FleetMaintenanceDialog
+          key={`maintenance-edit:${editing.record.id}`}
+          ambulance={ambulance}
+          record={editing.record}
+          onClose={() => setEditing(null)}
+          onCreate={saveMaintenance}
+          onUpdate={updateMaintenance}
+          onSaved={() => handleUpdated("maintenance")}
+        />
+      ) : null}
+
+      {deleting ? (
+        <FleetRecordDeleteDialog
+          key={`delete:${deleting.record.id}`}
+          summary={
+            deleting.kind === "fuel"
+              ? fuelSummary(deleting.record)
+              : maintenanceSummary(deleting.record)
+          }
+          onClose={() => setDeleting(null)}
+          onDelete={() =>
+            deleting.kind === "fuel"
+              ? removeFuel(deleting.record.id)
+              : removeMaintenance(deleting.record.id)
+          }
+          onDeleted={() => handleDeleted(deleting.kind)}
         />
       ) : null}
     </>
@@ -643,7 +784,47 @@ function MetaRow({ children }: { children: ReactNode }) {
   );
 }
 
-function FuelRow({ record }: { record: FleetFuelRecord }) {
+function RecordActions({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <span className="flex shrink-0 items-center gap-0.5">
+      <button
+        type="button"
+        onClick={onEdit}
+        aria-label={t("fleet.record.edit")}
+        title={t("fleet.record.edit")}
+        className="grid size-7 place-items-center rounded-lg text-ink-soft transition hover:bg-white hover:text-brand-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+      >
+        <Pencil aria-hidden className="size-3.5" />
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label={t("fleet.record.delete")}
+        title={t("fleet.record.delete")}
+        className="grid size-7 place-items-center rounded-lg text-ink-soft transition hover:bg-white hover:text-accent-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500"
+      >
+        <Trash2 aria-hidden className="size-3.5" />
+      </button>
+    </span>
+  );
+}
+
+function FuelRow({
+  record,
+  onEdit,
+  onDelete,
+}: {
+  record: FleetFuelRecord;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const { t, locale } = useI18n();
   const title =
     record.total_price !== null
@@ -656,8 +837,11 @@ function FuelRow({ record }: { record: FleetFuelRecord }) {
     <li className="rounded-xl bg-surface/70 p-3">
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 truncate text-sm font-semibold text-brand-900">{title}</p>
-        <span className="shrink-0 text-[11px] text-ink-soft">
-          {formatDateTime(record.recorded_at, "—")}
+        <span className="flex shrink-0 items-center gap-1">
+          <span className="text-[11px] text-ink-soft">
+            {formatDateTime(record.recorded_at, "—")}
+          </span>
+          <RecordActions onEdit={onEdit} onDelete={onDelete} />
         </span>
       </div>
 
@@ -691,7 +875,15 @@ function FuelRow({ record }: { record: FleetFuelRecord }) {
   );
 }
 
-function MaintenanceRow({ record }: { record: FleetMaintenanceRecord }) {
+function MaintenanceRow({
+  record,
+  onEdit,
+  onDelete,
+}: {
+  record: FleetMaintenanceRecord;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const { t, locale } = useI18n();
   const title = record.maintenance_type?.trim() || t("fleet.maintenance.entry");
   const nextMileage =
@@ -703,8 +895,11 @@ function MaintenanceRow({ record }: { record: FleetMaintenanceRecord }) {
     <li className="rounded-xl bg-surface/70 p-3">
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 truncate text-sm font-semibold text-brand-900">{title}</p>
-        <span className="shrink-0 text-[11px] text-ink-soft">
-          {formatDateTime(record.performed_at, "—")}
+        <span className="flex shrink-0 items-center gap-1">
+          <span className="text-[11px] text-ink-soft">
+            {formatDateTime(record.performed_at, "—")}
+          </span>
+          <RecordActions onEdit={onEdit} onDelete={onDelete} />
         </span>
       </div>
 

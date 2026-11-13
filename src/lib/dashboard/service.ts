@@ -8,6 +8,7 @@ import type {
   DashboardBootstrap,
   DashboardOverview,
   DashboardSnapshot,
+  DriverContact,
   MissionCancelResult,
   MissionDispatchResult,
   MissionsPage,
@@ -125,6 +126,24 @@ export async function fetchMissionPage(
   if (error) return { ok: false, code: mapDashboardError(error) };
   if (!data) return { ok: false, code: "unexpected" };
   return { ok: true, data: data as MissionsPage };
+}
+
+/**
+ * Contact of the driver assigned to one mission (202611130004, draft). The RPC
+ * derives the hospital from the manager membership and reads `profiles` by the
+ * mission's own `driver_id`, so company drivers are covered too. Called only
+ * for the selected mission, never for queue rows.
+ */
+export async function fetchMissionDriverContact(
+  supabase: SupabaseClient,
+  missionId: string,
+): Promise<DashboardResult<DriverContact>> {
+  const { data, error } = await supabase.rpc("hospital_manager_mission_driver_contact", {
+    p_mission_id: missionId,
+  });
+  if (error) return { ok: false, code: mapDashboardError(error) };
+  if (!data) return { ok: false, code: "unexpected" };
+  return { ok: true, data: data as DriverContact };
 }
 
 function toLegacyBootstrap(snapshot: DashboardSnapshot): DashboardBootstrap {
